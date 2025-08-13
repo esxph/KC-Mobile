@@ -1,10 +1,10 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Box, HStack, Pressable, Text } from '@gluestack-ui/themed';
+import { Box, HStack, Text } from '@gluestack-ui/themed';
 import { FileText, Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppColorMode } from '../../lib/ui';
-import { View } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -30,8 +30,8 @@ export default function TabsLayout() {
                 }
               };
               return (
-                <Pressable key={route.key} onPress={onPress} flex={1}>
-                  <Box bg={isFocused ? activeBg : 'transparent'} borderRadius="$full" py="$2.5" px="$4" alignItems="center">
+                <TouchableOpacity key={route.key} onPress={onPress} style={{ flex: 1 }} activeOpacity={0.8}>
+                  <Box bg={isFocused ? activeBg : 'transparent'} borderRadius="$full" py="$2.5" px="$4" alignItems="center" style={{ overflow: 'hidden' }}>
                     {route.name === 'reports' ? (
                       <FileText size={20} color={isFocused ? activeColor : inactiveColor} />
                     ) : (
@@ -41,7 +41,7 @@ export default function TabsLayout() {
                       {descriptors[route.key]?.options?.title ?? route.name}
                     </Text>
                   </Box>
-                </Pressable>
+                </TouchableOpacity>
               );
             })}
           </HStack>
@@ -60,8 +60,8 @@ export default function TabsLayout() {
         }}
         tabBar={(props)=> <CustomTabBar {...props} /> }
       >
-      <Tabs.Screen name="reports" options={{ title: 'Reports' }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+      <Tabs.Screen name="reports" options={{ title: 'Reportes' }} />
+      <Tabs.Screen name="settings" options={{ title: 'Ajustes' }} />
       </Tabs>
     </View>
   );

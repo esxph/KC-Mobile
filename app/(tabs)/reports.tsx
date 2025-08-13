@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
-import { Box, Heading, Text, VStack, Input, Button, Spinner, Select, SelectTrigger, SelectInput, SelectPortal, SelectBackdrop, SelectContent, SelectDragIndicator, SelectDragIndicatorWrapper, SelectItem } from '@gluestack-ui/themed';
+import { Box, Heading, Text, VStack, Input, Button, Spinner, Select, SelectTrigger, SelectInput, SelectPortal, SelectBackdrop, SelectContent, SelectDragIndicator, SelectDragIndicatorWrapper, SelectItem, HStack } from '@gluestack-ui/themed';
 import { Screen } from '../../lib/Screen';
 import { Picker } from '@react-native-picker/picker';
-import { fetchProjects, fetchElements, createReport, ReportType, ElementsResponse, Project } from '../../lib/api';
+import { fetchProjects, fetchElements, createReport, ReportType, ElementsResponse, Project, uploadMedia } from '../../lib/api';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function ReportsScreen() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState<string | undefined>(undefined);
+  const [projectId, setProjectId] = useState<string>('');
   const [elements, setElements] = useState<ElementsResponse | null>(null);
-  const [type, setType] = useState<ReportType | undefined>(undefined);
-  const [objectId, setObjectId] = useState<string | undefined>(undefined);
+  const [type, setType] = useState<ReportType>('partida');
+  const [objectId, setObjectId] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [comment, setComment] = useState<string>('');
   const [payload, setPayload] = useState<string>('{}');
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingElements, setLoadingElements] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -29,6 +31,7 @@ export default function ReportsScreen() {
           const p = await fetchProjects();
           if (!isActive) return;
           setProjects(p);
+          if (p.length && !projectId) setProjectId(p[0].id);
         } catch (e: any) {
           setError(e.message || 'Failed to load projects');
         } finally {
@@ -43,7 +46,7 @@ export default function ReportsScreen() {
 
   useEffect(() => {
     if (!projectId) return;
-    setObjectId(undefined);
+    setObjectId('');
     (async () => {
       try {
         setError(null);
@@ -66,7 +69,6 @@ export default function ReportsScreen() {
       case 'subpartida': return elements.subpartidas;
       case 'concepto': return elements.conceptos;
       case 'subconcepto': return elements.subconceptos;
-      default: return [] as {id:string; name:string}[];
     }
   }, [elements, type]);
 
@@ -75,13 +77,37 @@ export default function ReportsScreen() {
       setLoading(true);
       let parsed: any = undefined;
       try { parsed = payload ? JSON.parse(payload) : undefined; } catch { throw new Error('Payload must be valid JSON'); }
-      if (!projectId || !type) return;
-      const res = await createReport({ projectId, type, name, objectId, comment: comment || undefined, payload: parsed });
+      const res = await createReport({ projectId, type, name, objectId: objectId || undefined, comment: comment || undefined, payload: parsed });
       Alert.alert('Success', res.message + ' (id: ' + res.id + ')');
       setName(''); setComment(''); setPayload('{}'); setObjectId('');
     } catch (e:any) {
       Alert.alert('Error', e.message || 'Failed to create report');
     } finally { setLoading(false); }
+  };
+
+  const pickAndUpload = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Media library permission is required to upload.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9, allowsMultipleSelection: false });
+      if (result.canceled) return;
+      setUploading(true);
+      const asset = result.assets[0];
+      const fileUri = asset.uri;
+      const fileName = asset.fileName || 'upload.jpg';
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const projectName = projects.find(p=>p.id===projectId)?.name || 'Proyecto';
+      const elementDisplay = name || 'Reporte';
+      const res = await uploadMedia({ fileUri, fileName, mimeType, projectName, elementName: `/${elementDisplay}` });
+      Alert.alert('Upload', res.message || 'Uploaded');
+    } catch (e: any) {
+      Alert.alert('Upload error', e.message || 'Failed to upload');
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -105,6 +131,7 @@ export default function ReportsScreen() {
                 <SelectDragIndicatorWrapper>
                   <SelectDragIndicator />
                 </SelectDragIndicatorWrapper>
+                <SelectItem label="-- Select project --" value="" />
                 {projects.map(p => (<SelectItem key={p.id} label={p.name} value={p.id} />))}
               </SelectContent>
             </SelectPortal>
@@ -147,6 +174,7 @@ export default function ReportsScreen() {
                 <SelectDragIndicatorWrapper>
                   <SelectDragIndicator />
                 </SelectDragIndicatorWrapper>
+                <SelectItem label="-- Select --" value="" />
                 {currentList.map(e => (<SelectItem key={e.id} label={e.name} value={e.id} />))}
               </SelectContent>
             </SelectPortal>
@@ -175,9 +203,14 @@ export default function ReportsScreen() {
           </Input>
         </VStack>
 
-        <Button borderRadius="$full" isDisabled={loading || !projectId || !type || !name} onPress={submit}>
-          <Button.Text>{loading ? 'Submitting...' : 'Submit'}</Button.Text>
-        </Button>
+        <VStack space="sm">
+          <Button borderRadius="$full" isDisabled={loading || !projectId || !type || !name} onPress={submit}>
+            <Button.Text>{loading ? 'Submitting...' : 'Submit'}</Button.Text>
+          </Button>
+          <Button variant="outline" borderRadius="$full" isDisabled={uploading || !projectId} onPress={pickAndUpload}>
+            <Button.Text>{uploading ? 'Uploading...' : 'Upload media'}</Button.Text>
+          </Button>
+        </VStack>
         </VStack>
       </Box>
     </Screen>

@@ -72,3 +72,32 @@ export async function createReport(params: {
   }
   return res.json();
 }
+
+export async function uploadMedia(params: {
+  fileUri: string;
+  fileName: string;
+  mimeType: string;
+  projectName: string;
+  elementName: string;
+  hierarchyPath?: string;
+}): Promise<{ success: boolean; message: string; assetId: string; description: string }> {
+  await refreshTokensIfNeeded();
+  const jwt = await getAccessToken();
+  const form = new FormData();
+  // React Native needs explicit object for file
+  // @ts-ignore
+  form.append('file', { uri: params.fileUri, name: params.fileName, type: params.mimeType });
+  form.append('projectName', params.projectName);
+  form.append('elementName', params.elementName);
+  if (params.hierarchyPath) form.append('hierarchyPath', params.hierarchyPath);
+  const res = await fetch(API_BASE_URL + '/api/mobile/media/upload', {
+    method: 'POST',
+    headers: { Authorization: jwt ? 'Bearer ' + jwt : '' },
+    body: form,
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => 'Upload failed');
+    throw new Error(msg || 'Upload failed');
+  }
+  return res.json();
+}

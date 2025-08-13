@@ -28,16 +28,16 @@ export default function Login() {
     <Screen>
       <Box flex={1} px="$4" justifyContent="center">
         <VStack space="lg">
-          <Heading size="lg">Login</Heading>
+        <Heading size="lg">Iniciar sesión</Heading>
           <Input borderRadius="$full">
             <Input.Input placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
           </Input>
           <Input borderRadius="$full">
-            <Input.Input placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
+            <Input.Input placeholder="Contraseña" secureTextEntry value={password} onChangeText={setPassword} />
           </Input>
           {error ? <GSText color="$red600">{error}</GSText> : null}
           <Button borderRadius="$full" isDisabled={loading} onPress={onLogin}>
-            <Button.Text>{loading ? '...' : 'Sign in'}</Button.Text>
+            <Button.Text>{loading ? '...' : 'Entrar'}</Button.Text>
           </Button>
         </VStack>
       </Box>

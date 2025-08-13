@@ -1,12 +1,23 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, HStack, Text } from '@gluestack-ui/themed';
 import { FileText, Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppColorMode } from '../../lib/ui';
 import { View, TouchableOpacity } from 'react-native';
+import { Redirect } from 'expo-router';
+import { getAccessToken } from '../../lib/auth';
 
 export default function TabsLayout() {
+  const [checking, setChecking] = useState(true);
+  const [authed, setAuthed] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const token = await getAccessToken();
+      setAuthed(!!token);
+      setChecking(false);
+    })();
+  }, []);
   const insets = useSafeAreaInsets();
   const { colorMode } = useAppColorMode();
 
@@ -51,6 +62,8 @@ export default function TabsLayout() {
   };
 
   const backgroundColor = colorMode === 'dark' ? '#0b0b0b' : '#ffffff';
+  if (checking) return null;
+  if (!authed) return <Redirect href="/(auth)" />;
   return (
     <View style={{ flex: 1, backgroundColor }}>
       <Tabs
@@ -61,6 +74,7 @@ export default function TabsLayout() {
         tabBar={(props)=> <CustomTabBar {...props} /> }
       >
       <Tabs.Screen name="reports" options={{ title: 'Reportes' }} />
+      <Tabs.Screen name="pending" options={{ title: 'Pendientes' }} />
       <Tabs.Screen name="settings" options={{ title: 'Ajustes' }} />
       </Tabs>
     </View>

@@ -4,14 +4,18 @@ import { Box, Heading, Text, VStack, Input, Button, Spinner, Select, SelectTrigg
 import { Screen } from '../../lib/Screen';
 import { Picker } from '@react-native-picker/picker';
 import { fetchProjects, fetchElements, createReport, ReportType, ElementsResponse, Project, uploadMedia } from '../../lib/api';
+import * as Network from 'expo-network';
+import { addPending } from '../../lib/pending';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
+
+type SelectedReportType = ReportType | '';
 
 export default function ReportsScreen() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string>('');
   const [elements, setElements] = useState<ElementsResponse | null>(null);
-  const [type, setType] = useState<ReportType>('partida');
+  const [type, setType] = useState<SelectedReportType>('');
   const [objectId, setObjectId] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [comment, setComment] = useState<string>('');
@@ -21,6 +25,7 @@ export default function ReportsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
   const [uploadIndex, setUploadIndex] = useState<number>(0);
+  const [controller, setController] = useState<AbortController | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -32,7 +37,6 @@ export default function ReportsScreen() {
           const p = await fetchProjects();
           if (!isActive) return;
           setProjects(p);
-          if (p.length && !projectId) setProjectId(p[0].id);
         } catch (e: any) {
           setError(e.message || 'Failed to load projects');
         } finally {
@@ -70,12 +74,22 @@ export default function ReportsScreen() {
       case 'subpartida': return elements.subpartidas;
       case 'concepto': return elements.conceptos;
       case 'subconcepto': return elements.subconceptos;
+      case '':
+      default:
+        return [] as { id: string; name: string }[];
     }
   }, [elements, type]);
 
   const submit = async () => {
     try {
       setLoading(true);
+      const net = await Network.getNetworkStateAsync();
+      if (!net.isConnected) {
+        await addPending({ projectId, type: type as ReportType, objectId: objectId || undefined, name, comment: comment || undefined, media: selectedMedia });
+        Alert.alert('Offline', 'Guardado en pendientes.');
+        setLoading(false);
+        return;
+      }
       const hierarchyPath = (() => {
         if (!elements || !objectId) return undefined;
         const list = currentList || [];
@@ -88,19 +102,22 @@ export default function ReportsScreen() {
         setUploading(true);
         for (let i = 0; i < selectedMedia.length; i++) {
           setUploadIndex(i + 1);
+          const ac = new AbortController();
+          setController(ac);
           const m = selectedMedia[i];
           const projectName = projects.find(p=>p.id===projectId)?.name || 'Project';
           const elementDisplay = name || 'Report';
-          const resUp = await uploadMedia({ fileUri: m.uri, fileName: m.fileName, mimeType: m.mimeType, projectName, elementName: `/${elementDisplay}`, hierarchyPath });
+          const resUp = await uploadMedia({ fileUri: m.uri, fileName: m.fileName, mimeType: m.mimeType, projectName, elementName: `/${elementDisplay}`, hierarchyPath }, { signal: ac.signal });
           // @ts-ignore
           if (resUp?.assetId) assetIds.push(resUp.assetId);
         }
         setUploading(false);
         setUploadIndex(0);
+        setController(null);
       }
 
       const payload = { assetIds };
-      const res = await createReport({ projectId, type, name, objectId: objectId || undefined, comment: comment || undefined, payload });
+      const res = await createReport({ projectId, type: type as ReportType, name, objectId: objectId || undefined, comment: comment || undefined, payload });
       Alert.alert('Success', res.message + ' (id: ' + res.id + ')');
       setName(''); setComment(''); setSelectedMedia([]); setObjectId('');
     } catch (e:any) {
@@ -115,7 +132,7 @@ export default function ReportsScreen() {
         Alert.alert('Permission required', 'Media library permission is required to upload.');
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9, allowsMultipleSelection: true });
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9, allowsMultipleSelection: true, base64: false });
       if (result.canceled) return;
       const newItems = result.assets.map(a => ({ uri: a.uri, fileName: a.fileName || 'upload.jpg', mimeType: a.mimeType || 'image/jpeg' }));
       setSelectedMedia(prev => [...prev, ...newItems]);
@@ -145,7 +162,6 @@ export default function ReportsScreen() {
                 <SelectDragIndicatorWrapper>
                   <SelectDragIndicator />
                 </SelectDragIndicatorWrapper>
-                <SelectItem label="-- Select project --" value="" />
                 {projects.map(p => (<SelectItem key={p.id} label={p.name} value={p.id} />))}
               </SelectContent>
             </SelectPortal>
@@ -188,7 +204,6 @@ export default function ReportsScreen() {
                 <SelectDragIndicatorWrapper>
                   <SelectDragIndicator />
                 </SelectDragIndicatorWrapper>
-                <SelectItem label="-- Select --" value="" />
                 {currentList.map(e => (<SelectItem key={e.id} label={e.name} value={e.id} />))}
               </SelectContent>
             </SelectPortal>
@@ -220,14 +235,19 @@ export default function ReportsScreen() {
         </VStack>
 
         <VStack space="sm">
-          <Button borderRadius="$full" isDisabled={loading || !projectId || !type || !name} onPress={submit}>
+          <Button borderRadius="$full" isDisabled={loading || uploading || !projectId || !type || !objectId || !name} onPress={submit}>
             <Button.Text>{loading ? 'Submitting...' : 'Submit'}</Button.Text>
           </Button>
-          <Button variant="outline" borderRadius="$full" isDisabled={!projectId} onPress={pickAndUpload}>
+          <Button variant="outline" borderRadius="$full" isDisabled={!projectId || !type || !objectId || !name} onPress={pickAndUpload}>
             <Button.Text>Add images</Button.Text>
           </Button>
           {uploading ? (
-            <Text>{`Uploading ${uploadIndex}/${selectedMedia.length}...`}</Text>
+            <HStack space="sm" alignItems="center">
+              <Text>{`Uploading ${uploadIndex}/${selectedMedia.length}...`}</Text>
+              <Button size="sm" variant="outline" borderRadius="$full" onPress={() => { controller?.abort(); setUploading(false); }}>
+                <Button.Text>Cancel</Button.Text>
+              </Button>
+            </HStack>
           ) : null}
         </VStack>
         </VStack>

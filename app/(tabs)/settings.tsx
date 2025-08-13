@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import { Box, Heading, Button, VStack, Text, HStack, Switch } from '@gluestack-ui/themed';
 import { Screen } from '../../lib/Screen';
-import { supabase } from '../../lib/supabase';
+import { clearTokens } from '../../lib/auth';
 import { router } from 'expo-router';
 import { useAppColorMode } from '../../lib/ui';
 
@@ -9,8 +9,7 @@ export default function Settings() {
   const { colorMode, setColorMode } = useAppColorMode();
   const signOut = async () => { 
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await clearTokens();
       router.replace('/');
     } catch (e: any) {
       Alert.alert('Logout failed', e.message || 'Unknown error');

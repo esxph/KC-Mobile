@@ -1,4 +1,5 @@
 import { getAccessToken, refreshTokensIfNeeded } from './auth';
+import { Platform } from 'react-native';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL!;
 
@@ -52,16 +53,8 @@ export async function createReport(params: {
   payload?: any;
   data?: any;
 }): Promise<{ id: string; message: string }> {
-  // Use form encoding to avoid preflight; stringify complex fields
-  const headers = { ...(await getAuthHeader()) } as Record<string, string>;
-  const body = new URLSearchParams();
-  body.set('projectId', params.projectId);
-  body.set('type', params.type);
-  body.set('name', params.name);
-  if (params.objectId) body.set('objectId', params.objectId);
-  if (params.comment) body.set('comment', params.comment);
-  if (params.payload !== undefined) body.set('payload', JSON.stringify(params.payload));
-  if (params.data !== undefined) body.set('data', JSON.stringify(params.data));
+  const headers = { 'Content-Type': 'application/json', Accept: 'application/json', ...(await getAuthHeader()) } as Record<string, string>;
+  const body = JSON.stringify(params);
   const res = await fetch(API_BASE_URL + '/api/reports', {
     method: 'POST',
     headers,
@@ -80,24 +73,37 @@ export async function uploadMedia(params: {
   projectName: string;
   elementName: string;
   hierarchyPath?: string;
-}): Promise<{ success: boolean; message: string; assetId: string; description: string }> {
+}, options?: { signal?: AbortSignal }): Promise<{ success: boolean; message: string; assetId: string; description: string }> {
   await refreshTokensIfNeeded();
   const jwt = await getAccessToken();
+  if (!jwt) {
+    throw new Error('Not authenticated');
+  }
   const form = new FormData();
-  // React Native needs explicit object for file
-  // @ts-ignore
-  form.append('file', { uri: params.fileUri, name: params.fileName, type: params.mimeType });
+  // Build file part per platform
+  if (Platform.OS === 'web') {
+    const resp = await fetch(params.fileUri);
+    const blob = await resp.blob();
+    const file = new File([blob], params.fileName, { type: params.mimeType });
+    form.append('file', file);
+  } else {
+    // React Native style file descriptor
+    // @ts-ignore
+    form.append('file', { uri: params.fileUri, name: params.fileName, type: params.mimeType });
+  }
   form.append('projectName', params.projectName);
   form.append('elementName', params.elementName);
   if (params.hierarchyPath) form.append('hierarchyPath', params.hierarchyPath);
   const res = await fetch(API_BASE_URL + '/api/mobile/media/upload', {
     method: 'POST',
-    headers: { Authorization: jwt ? 'Bearer ' + jwt : '' },
+    headers: { Authorization: 'Bearer ' + jwt, Accept: 'application/json' },
     body: form,
+    signal: options?.signal,
   });
   if (!res.ok) {
-    const msg = await res.text().catch(() => 'Upload failed');
-    throw new Error(msg || 'Upload failed');
+    let msg: string;
+    try { msg = await res.text(); } catch { msg = 'Upload failed'; }
+    throw new Error(`Upload failed (${res.status}): ${msg}`);
   }
   return res.json();
 }

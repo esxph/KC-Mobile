@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getAccessToken } from './auth';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL!;
 
@@ -11,8 +11,7 @@ export type ElementsResponse = {
 };
 
 async function getAuthHeader() {
-  const { data } = await supabase.auth.getSession();
-  const jwt = data.session?.access_token;
+  const jwt = await getAccessToken();
   return jwt ? { Authorization: 'Bearer ' + jwt } : {};
 }
 

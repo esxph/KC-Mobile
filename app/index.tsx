@@ -1,17 +1,17 @@
 import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { getAccessToken } from '../lib/auth';
 
 export default function Gate() {
   const [initial, setInitial] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSignedIn(!!session); setInitial(false);
-    });
-    supabase.auth.getSession().then(({ data }) => { setSignedIn(!!data.session); setInitial(false); });
-    return () => { sub.subscription.unsubscribe(); };
+    (async () => {
+      const token = await getAccessToken();
+      setSignedIn(!!token);
+      setInitial(false);
+    })();
   }, []);
 
   if (initial) return null;

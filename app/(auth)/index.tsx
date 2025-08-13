@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, TextInput, Text } from 'react-native';
 import { Box, Heading, VStack, Input, Button, Text as GSText } from '@gluestack-ui/themed';
 import { Screen } from '../../lib/Screen';
-import { supabase } from '../../lib/supabase';
+import { loginWithCredentials } from '../../lib/auth';
 import { router } from 'expo-router';
 
 export default function Login() {
@@ -13,9 +13,14 @@ export default function Login() {
 
   const onLogin = async () => {
     setLoading(true); setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      await loginWithCredentials(email, password);
+    } catch (e: any) {
+      setLoading(false);
+      setError(e.message || 'Login failed');
+      return;
+    }
     setLoading(false);
-    if (error) { setError(error.message); return; }
     router.replace('/(tabs)/reports');
   };
 

@@ -27,8 +27,9 @@ export default function Login() {
   return (
     <Screen>
       <Box flex={1} px="$4" justifyContent="center">
-        <VStack space="lg">
-        <Heading size="lg">Iniciar sesión</Heading>
+      <VStack space="lg">
+        <Heading size="3xl" alignSelf="center">CiviLog</Heading>
+        <Heading size="lg" alignSelf="center">Iniciar sesión</Heading>
           <Input borderRadius="$full">
             <Input.Input placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
           </Input>

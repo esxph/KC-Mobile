@@ -9,6 +9,7 @@ export type PendingReport = {
   objectId?: string;
   name: string;
   comment?: string;
+  progress?: number; // 0-100
   media: PendingMedia[];
 };
 
@@ -36,4 +37,20 @@ export async function addPending(report: Omit<PendingReport, 'id' | 'createdAt'>
 export async function removePending(id: string) {
   const list = await loadPending();
   await savePending(list.filter(r => r.id !== id));
+}
+
+export async function updatePendingMedia(id: string, media: PendingMedia[]) {
+  const list = await loadPending();
+  const idx = list.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  list[idx] = { ...list[idx], media };
+  await savePending(list);
+}
+
+export async function updatePendingDetails(id: string, details: Partial<Pick<PendingReport, 'name' | 'comment' | 'progress'>>) {
+  const list = await loadPending();
+  const idx = list.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  list[idx] = { ...list[idx], ...details };
+  await savePending(list);
 }

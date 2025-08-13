@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Box, HStack, Text } from '@gluestack-ui/themed';
-import { FileText, Settings } from 'lucide-react-native';
+import { FileText, Settings, Clock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppColorMode } from '../../lib/ui';
 import { View, TouchableOpacity } from 'react-native';
@@ -22,6 +22,11 @@ export default function TabsLayout() {
   const { colorMode } = useAppColorMode();
 
   const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+    const iconMap: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+      reports: FileText,
+      pending: Clock,
+      settings: Settings,
+    };
     // Slightly lighter container in dark mode for contrast
     const bg = colorMode === 'dark' ? '#2a2a2a' : '#f2f2f2';
     const activeBg = colorMode === 'dark' ? '#121212' : '#ffffff';
@@ -43,11 +48,7 @@ export default function TabsLayout() {
               return (
                 <TouchableOpacity key={route.key} onPress={onPress} style={{ flex: 1 }} activeOpacity={0.8}>
                   <Box bg={isFocused ? activeBg : 'transparent'} borderRadius="$full" py="$2.5" px="$4" alignItems="center" style={{ overflow: 'hidden' }}>
-                    {route.name === 'reports' ? (
-                      <FileText size={20} color={isFocused ? activeColor : inactiveColor} />
-                    ) : (
-                      <Settings size={20} color={isFocused ? activeColor : inactiveColor} />
-                    )}
+                    {(() => { const Icon = iconMap[route.name] || FileText; return <Icon size={20} color={isFocused ? activeColor : inactiveColor} />; })()}
                     <Text mt="$1" fontSize={14} fontWeight="$semibold" color={isFocused ? activeColor : inactiveColor}>
                       {descriptors[route.key]?.options?.title ?? route.name}
                     </Text>
@@ -74,7 +75,7 @@ export default function TabsLayout() {
         tabBar={(props)=> <CustomTabBar {...props} /> }
       >
       <Tabs.Screen name="reports" options={{ title: 'Reportes' }} />
-      <Tabs.Screen name="pending" options={{ title: 'Pendientes' }} />
+      <Tabs.Screen name="pending" options={{ title: 'Pendiente' }} />
       <Tabs.Screen name="settings" options={{ title: 'Ajustes' }} />
       </Tabs>
     </View>

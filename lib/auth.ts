@@ -34,10 +34,11 @@ export async function clearTokens() {
 }
 
 export async function loginWithCredentials(email: string, password: string): Promise<{ access_token: string; refresh_token: string; payload: JwtPayload | null }> {
+  // JSON login as requested (server should allow CORS for this route)
   const res = await fetch(API_BASE_URL + '/api/jwt', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password })
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
     throw new Error('Login failed (' + res.status + ')');
@@ -48,5 +49,56 @@ export async function loginWithCredentials(email: string, password: string): Pro
   await setTokens(access, refresh);
   const payload = decodeJwt(access);
   return { access_token: access, refresh_token: refresh, payload };
+}
+
+export async function getRefreshToken(): Promise<string | null> {
+  return AsyncStorage.getItem(REFRESH_KEY);
+}
+
+export function isTokenExpiringSoon(jwt: string, bufferSeconds = 60): boolean {
+  const payload = decodeJwt(jwt);
+  if (!payload?.exp) return true;
+  const nowSec = Math.floor(Date.now() / 1000);
+  return payload.exp - nowSec <= bufferSeconds;
+}
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+export async function refreshTokensIfNeeded(): Promise<string | null> {
+  const current = await getAccessToken();
+  if (!current) return null;
+  if (!isTokenExpiringSoon(current)) return current;
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const refresh = await getRefreshToken();
+    if (!refresh) {
+      await clearTokens();
+      refreshInFlight = null;
+      return null;
+    }
+    const res = await fetch(API_BASE_URL + '/api/jwt/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+    if (!res.ok) {
+      await clearTokens();
+      refreshInFlight = null;
+      return null;
+    }
+    const json = await res.json();
+    const accessNew: string = json.access_token;
+    const refreshNew: string = json.refresh_token ?? refresh;
+    await setTokens(accessNew, refreshNew);
+    refreshInFlight = null;
+    return accessNew;
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
 }
 

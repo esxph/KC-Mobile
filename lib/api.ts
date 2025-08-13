@@ -1,4 +1,4 @@
-import { getAccessToken } from './auth';
+import { getAccessToken, refreshTokensIfNeeded } from './auth';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL!;
 
@@ -11,12 +11,13 @@ export type ElementsResponse = {
 };
 
 async function getAuthHeader() {
+  await refreshTokensIfNeeded();
   const jwt = await getAccessToken();
   return jwt ? { Authorization: 'Bearer ' + jwt } : {};
 }
 
 export async function fetchProjects(): Promise<Project[]> {
-  const headers = { 'Content-Type': 'application/json', ...(await getAuthHeader()) } as Record<string, string>;
+  const headers = { ...(await getAuthHeader()) } as Record<string, string>;
   const res = await fetch(API_BASE_URL + '/api/mobile/projects', { headers, method: 'GET' });
   if (!res.ok) {
     if (res.status === 401) throw new Error('Unauthorized');
@@ -27,7 +28,7 @@ export async function fetchProjects(): Promise<Project[]> {
 }
 
 export async function fetchElements(projectId: string): Promise<ElementsResponse> {
-  const headers = { 'Content-Type': 'application/json', ...(await getAuthHeader()) } as Record<string, string>;
+  const headers = { ...(await getAuthHeader()) } as Record<string, string>;
   const url = new URL(API_BASE_URL + '/api/mobile/elements');
   url.searchParams.set('projectId', projectId);
   const res = await fetch(url.toString(), { headers, method: 'GET' });
@@ -51,11 +52,20 @@ export async function createReport(params: {
   payload?: any;
   data?: any;
 }): Promise<{ id: string; message: string }> {
-  const headers = { 'Content-Type': 'application/json', ...(await getAuthHeader()) } as Record<string, string>;
+  // Use form encoding to avoid preflight; stringify complex fields
+  const headers = { ...(await getAuthHeader()) } as Record<string, string>;
+  const body = new URLSearchParams();
+  body.set('projectId', params.projectId);
+  body.set('type', params.type);
+  body.set('name', params.name);
+  if (params.objectId) body.set('objectId', params.objectId);
+  if (params.comment) body.set('comment', params.comment);
+  if (params.payload !== undefined) body.set('payload', JSON.stringify(params.payload));
+  if (params.data !== undefined) body.set('data', JSON.stringify(params.data));
   const res = await fetch(API_BASE_URL + '/api/reports', {
     method: 'POST',
     headers,
-    body: JSON.stringify(params),
+    body,
   });
   if (!res.ok) {
     throw new Error('Failed to create report (' + res.status + ')');

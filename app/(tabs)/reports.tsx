@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Image } from 'react-native';
 import { Box, Heading, Text, VStack, Input, Button, Spinner, Select, SelectTrigger, SelectInput, SelectPortal, SelectBackdrop, SelectContent, SelectDragIndicator, SelectDragIndicatorWrapper, SelectItem, HStack } from '@gluestack-ui/themed';
 import { Screen } from '../../lib/Screen';
 import { Picker } from '@react-native-picker/picker';
@@ -15,11 +15,12 @@ export default function ReportsScreen() {
   const [objectId, setObjectId] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [comment, setComment] = useState<string>('');
-  const [payload, setPayload] = useState<string>('{}');
+  const [selectedMedia, setSelectedMedia] = useState<Array<{ uri: string; fileName: string; mimeType: string }>>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingElements, setLoadingElements] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadIndex, setUploadIndex] = useState<number>(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -75,11 +76,33 @@ export default function ReportsScreen() {
   const submit = async () => {
     try {
       setLoading(true);
-      let parsed: any = undefined;
-      try { parsed = payload ? JSON.parse(payload) : undefined; } catch { throw new Error('Payload must be valid JSON'); }
-      const res = await createReport({ projectId, type, name, objectId: objectId || undefined, comment: comment || undefined, payload: parsed });
+      const hierarchyPath = (() => {
+        if (!elements || !objectId) return undefined;
+        const list = currentList || [];
+        const found = list.find(e => e.id === objectId);
+        return found?.name;
+      })();
+
+      const assetIds: string[] = [];
+      if (selectedMedia.length > 0) {
+        setUploading(true);
+        for (let i = 0; i < selectedMedia.length; i++) {
+          setUploadIndex(i + 1);
+          const m = selectedMedia[i];
+          const projectName = projects.find(p=>p.id===projectId)?.name || 'Project';
+          const elementDisplay = name || 'Report';
+          const resUp = await uploadMedia({ fileUri: m.uri, fileName: m.fileName, mimeType: m.mimeType, projectName, elementName: `/${elementDisplay}`, hierarchyPath });
+          // @ts-ignore
+          if (resUp?.assetId) assetIds.push(resUp.assetId);
+        }
+        setUploading(false);
+        setUploadIndex(0);
+      }
+
+      const payload = { assetIds };
+      const res = await createReport({ projectId, type, name, objectId: objectId || undefined, comment: comment || undefined, payload });
       Alert.alert('Success', res.message + ' (id: ' + res.id + ')');
-      setName(''); setComment(''); setPayload('{}'); setObjectId('');
+      setName(''); setComment(''); setSelectedMedia([]); setObjectId('');
     } catch (e:any) {
       Alert.alert('Error', e.message || 'Failed to create report');
     } finally { setLoading(false); }
@@ -92,21 +115,12 @@ export default function ReportsScreen() {
         Alert.alert('Permission required', 'Media library permission is required to upload.');
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9, allowsMultipleSelection: false });
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9, allowsMultipleSelection: true });
       if (result.canceled) return;
-      setUploading(true);
-      const asset = result.assets[0];
-      const fileUri = asset.uri;
-      const fileName = asset.fileName || 'upload.jpg';
-      const mimeType = asset.mimeType || 'image/jpeg';
-      const projectName = projects.find(p=>p.id===projectId)?.name || 'Proyecto';
-      const elementDisplay = name || 'Reporte';
-      const res = await uploadMedia({ fileUri, fileName, mimeType, projectName, elementName: `/${elementDisplay}` });
-      Alert.alert('Upload', res.message || 'Uploaded');
+      const newItems = result.assets.map(a => ({ uri: a.uri, fileName: a.fileName || 'upload.jpg', mimeType: a.mimeType || 'image/jpeg' }));
+      setSelectedMedia(prev => [...prev, ...newItems]);
     } catch (e: any) {
       Alert.alert('Upload error', e.message || 'Failed to upload');
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -197,19 +211,24 @@ export default function ReportsScreen() {
         </VStack>
 
         <VStack space="xs">
-          <Text>Payload (JSON)</Text>
-          <Input borderRadius="$lg">
-            <Input.Input placeholder="{}" value={payload} onChangeText={setPayload} multiline />
-          </Input>
+          <Text>Selected media</Text>
+          <HStack space="sm" flexWrap="wrap">
+            {selectedMedia.map((m, idx) => (
+              <Image key={idx} source={{ uri: m.uri }} style={{ width: 64, height: 64, borderRadius: 12 }} />
+            ))}
+          </HStack>
         </VStack>
 
         <VStack space="sm">
           <Button borderRadius="$full" isDisabled={loading || !projectId || !type || !name} onPress={submit}>
             <Button.Text>{loading ? 'Submitting...' : 'Submit'}</Button.Text>
           </Button>
-          <Button variant="outline" borderRadius="$full" isDisabled={uploading || !projectId} onPress={pickAndUpload}>
-            <Button.Text>{uploading ? 'Uploading...' : 'Upload media'}</Button.Text>
+          <Button variant="outline" borderRadius="$full" isDisabled={!projectId} onPress={pickAndUpload}>
+            <Button.Text>Add images</Button.Text>
           </Button>
+          {uploading ? (
+            <Text>{`Uploading ${uploadIndex}/${selectedMedia.length}...`}</Text>
+          ) : null}
         </VStack>
         </VStack>
       </Box>

@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL!;
 
 export type Project = { id: string; name: string };
+export type UnitType = { id: string; name: string; symbol: string };
 export type ElementsResponse = {
   partidas: Array<{ id: string; name: string }>;
   subpartidas: Array<{ id: string; name: string; partida_id: string }>;
@@ -40,6 +41,50 @@ export async function fetchElements(projectId: string): Promise<ElementsResponse
     throw new Error('Failed to load elements');
   }
   return (await res.json()) as ElementsResponse;
+}
+
+export async function fetchUnitTypes(): Promise<UnitType[]> {
+  const headers = { ...(await getAuthHeader()) } as Record<string, string>;
+  const url = API_BASE_URL + '/api/mobile/unit-types';
+  
+  const res = await fetch(url, { headers, method: 'GET' });
+  
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Unauthorized');
+    if (res.status === 404) throw new Error('Unit types endpoint not found');
+    if (res.status === 500) {
+      const errorText = await res.text();
+      throw new Error(`Server error (500): ${errorText || 'Internal server error'}`);
+    }
+    const errorText = await res.text();
+    throw new Error(`Failed to load unit types (${res.status}): ${errorText}`);
+  }
+  const json = await res.json();
+  
+  // Handle the unit_types array format with value objects
+  if (json.unit_types && Array.isArray(json.unit_types)) {
+    const unitTypes: UnitType[] = json.unit_types.map((item: any, index: number) => ({
+      id: (index + 1).toString(),
+      name: item.value,
+      symbol: item.value
+    }));
+    
+    return unitTypes;
+  }
+  
+  // Handle direct array format
+  if (Array.isArray(json)) {
+    const unitTypes: UnitType[] = json.map((item: any) => ({
+      id: item.id,
+      name: item.name.value,
+      symbol: item.symbol.value
+    }));
+    
+    return unitTypes;
+  }
+  
+  // Fallback for other formats
+  return json.unitTypes as UnitType[];
 }
 
 export type ReportType = 'partida' | 'subpartida' | 'concepto' | 'subconcepto';

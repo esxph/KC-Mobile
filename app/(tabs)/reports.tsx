@@ -3,8 +3,8 @@ import { Alert, Image, ScrollView } from 'react-native';
 import { Box, Heading, Text, VStack, Input, Button, Spinner, Select, SelectTrigger, SelectInput, SelectPortal, SelectBackdrop, SelectContent, SelectDragIndicator, SelectDragIndicatorWrapper, SelectItem, HStack, Textarea, Modal, ModalBackdrop, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, Slider, SliderTrack, SliderFilledTrack, SliderThumb } from '@gluestack-ui/themed';
 import { Screen } from '../../lib/Screen';
 import { Picker } from '@react-native-picker/picker';
-import { fetchProjects, fetchElements, createReport, ReportType, ElementsResponse, Project, uploadMedia } from '../../lib/api';
-import { getCachedProjects, setCachedProjects, getCachedElements, setCachedElements } from '../../lib/cache';
+import { fetchProjects, fetchElements, fetchUnitTypes, createReport, ReportType, ElementsResponse, Project, UnitType, uploadMedia } from '../../lib/api';
+import { getCachedProjects, setCachedProjects, getCachedElements, setCachedElements, getCachedUnitTypes, setCachedUnitTypes } from '../../lib/cache';
 import * as Network from 'expo-network';
 import { addPending } from '../../lib/pending';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,10 +22,13 @@ export default function ReportsScreen() {
   const [objectId, setObjectId] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [comment, setComment] = useState<string>('');
-  const [progress, setProgress] = useState<number>(0);
+  const [quantity, setQuantity] = useState<string>('');
+  const [unitType, setUnitType] = useState<string>('');
+  const [unitTypes, setUnitTypes] = useState<UnitType[]>([]);
   const [selectedMedia, setSelectedMedia] = useState<Array<{ uri: string; fileName: string; mimeType: string }>>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingElements, setLoadingElements] = useState<boolean>(false);
+  const [loadingUnitTypes, setLoadingUnitTypes] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
   const [uploadIndex, setUploadIndex] = useState<number>(0);
@@ -40,16 +43,47 @@ export default function ReportsScreen() {
         try {
           setError(null);
           setLoading(true);
-          const cached = await getCachedProjects();
-          if (cached && isActive) setProjects(cached);
+          setLoadingUnitTypes(true);
+          
+          // Load projects
+          const cachedProjects = await getCachedProjects();
+          if (cachedProjects && isActive) setProjects(cachedProjects);
           const p = await fetchProjects();
           if (!isActive) return;
           setProjects(p);
           await setCachedProjects(p);
+          
+          // Load unit types
+          const cachedUnitTypes = await getCachedUnitTypes();
+          if (cachedUnitTypes && isActive) {
+            setUnitTypes(cachedUnitTypes);
+          }
+          try {
+            const ut = await fetchUnitTypes();
+            if (!isActive) return;
+            setUnitTypes(ut);
+            await setCachedUnitTypes(ut);
+          } catch (e: any) {
+            // If we have cached data, use it; otherwise, use fallback data
+            if (!cachedUnitTypes || cachedUnitTypes.length === 0) {
+              const fallbackUnitTypes: UnitType[] = [
+                { id: '1', name: 'Metros', symbol: 'm' },
+                { id: '2', name: 'Metros cuadrados', symbol: 'm²' },
+                { id: '3', name: 'Metros cúbicos', symbol: 'm³' },
+                { id: '4', name: 'Kilogramos', symbol: 'kg' },
+                { id: '5', name: 'Toneladas', symbol: 'ton' },
+                { id: '6', name: 'Unidades', symbol: 'unit' },
+                { id: '7', name: 'Horas', symbol: 'hour' },
+                { id: '8', name: 'Días', symbol: 'day' }
+              ];
+              setUnitTypes(fallbackUnitTypes);
+            }
+          }
         } catch (e: any) {
-          if (!projects.length) setError(e.message || 'Failed to load projects');
+          if (!projects.length) setError(e.message || 'Failed to load data');
         } finally {
           setLoading(false);
+          setLoadingUnitTypes(false);
         }
       })();
       return () => {
@@ -99,7 +133,7 @@ export default function ReportsScreen() {
       setLoading(true);
       const net = await Network.getNetworkStateAsync();
       if (!net.isConnected) {
-        await addPending({ projectId, type: type as ReportType, objectId: objectId || undefined, name, comment: comment || undefined, progress, media: selectedMedia });
+        await addPending({ projectId, type: type as ReportType, objectId: objectId || undefined, name, comment: comment || undefined, quantity: quantity || undefined, unitType: unitType || undefined, media: selectedMedia });
         Alert.alert('Sin conexión', 'Guardado en pendientes.');
         // Clear all fields for a fresh report
         setProjectId('');
@@ -107,7 +141,8 @@ export default function ReportsScreen() {
         setObjectId('');
         setName('');
         setComment('');
-        setProgress(0);
+        setQuantity('');
+        setUnitType('');
         setSelectedMedia([]);
         setLoading(false);
         return;
@@ -138,13 +173,34 @@ export default function ReportsScreen() {
         setController(null);
       }
 
-      const payload = { assetIds, progress };
+      const payload = { assetIds, quantity: quantity || undefined, unitType: unitType || undefined };
       const res = await createReport({ projectId, type: type as ReportType, name, objectId: objectId || undefined, comment: comment || undefined, payload });
       Alert.alert('Reporte creado exitosamente.');
-      setName(''); setComment(''); setSelectedMedia([]); setObjectId('');
+      setName(''); setComment(''); setQuantity(''); setUnitType(''); setSelectedMedia([]); setObjectId('');
     } catch (e:any) {
       Alert.alert('Error', e.message || 'Error al crear el reporte');
     } finally { setLoading(false); }
+  };
+
+  const saveDraft = async () => {
+    try {
+      setLoading(true);
+      await addPending({ projectId, type: type as ReportType, objectId: objectId || undefined, name, comment: comment || undefined, quantity: quantity || undefined, unitType: unitType || undefined, media: selectedMedia, isDraft: true });
+      Alert.alert('Borrador guardado', 'El reporte se ha guardado como borrador en pendientes.');
+      // Clear all fields for a fresh report
+      setProjectId('');
+      setType('');
+      setObjectId('');
+      setName('');
+      setComment('');
+      setQuantity('');
+      setUnitType('');
+      setSelectedMedia([]);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Error al guardar el borrador');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const pickAndUpload = async () => {
@@ -169,8 +225,9 @@ export default function ReportsScreen() {
     setObjectId('');
     setName('');
     setComment('');
+    setQuantity('');
+    setUnitType('');
     setSelectedMedia([]);
-    setProgress(0);
     setElements(null);
     setError(null);
     setFormKey((k) => k + 1);
@@ -187,7 +244,10 @@ export default function ReportsScreen() {
         showsVerticalScrollIndicator
       >
         <VStack space="lg">
-        <Heading size="lg">Crear reporte</Heading>
+        <VStack space="xs">
+          <Heading size="lg">Crear reporte</Heading>
+          <Text color="$secondary600" size="sm">Puedes enviar directamente o guardar como borrador</Text>
+        </VStack>
 
         {loading ? <Spinner /> : null}
         {error ? <Text color="$red600">{error}</Text> : null}
@@ -276,18 +336,32 @@ export default function ReportsScreen() {
         </VStack>
 
         <VStack space="xs">
-          <HStack alignItems="center" justifyContent="space-between" style={{ marginBottom: 18 }}>
-            <Text>Progreso</Text>
-            <Text>{progress}%</Text>
-          </HStack>
-          <Box style={{ paddingHorizontal: 16 }}>
-            <Slider value={progress} minValue={0} maxValue={100} step={1} onChange={(v)=> setProgress(Array.isArray(v) ? v[0] : (v as number))}>
-              <SliderTrack bg="$secondary200" style={{ height: 6, borderRadius: 9999 }}>
-                <SliderFilledTrack bg="$primary600" />
-              </SliderTrack>
-              <SliderThumb />
-            </Slider>
-          </Box>
+          <Text>Cantidad</Text>
+          <Input borderRadius="$lg">
+            <Input.Input placeholder="Cantidad" value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
+          </Input>
+        </VStack>
+
+        <VStack space="xs">
+          <Text>Unidad</Text>
+          <Select key={`unit-${formKey}`} selectedValue={unitType || undefined} onValueChange={(v)=>setUnitType(v)}>
+            <SelectTrigger borderRadius="$lg">
+              <SelectInput placeholder="-- Selecciona una unidad --" />
+            </SelectTrigger>
+            <SelectPortal>
+              <SelectBackdrop />
+              <SelectContent borderRadius="$lg">
+                <SelectDragIndicatorWrapper>
+                  <SelectDragIndicator />
+                </SelectDragIndicatorWrapper>
+                {unitTypes && unitTypes.map(ut => (<SelectItem key={ut.id} label={ut.name} value={ut.id} />))}
+              </SelectContent>
+            </SelectPortal>
+          </Select>
+          {loadingUnitTypes ? <Spinner /> : null}
+          {(!unitTypes || unitTypes.length === 0) && !loadingUnitTypes ? (
+            <Text color="$secondary500">No hay unidades disponibles. Verifica la conexión a internet y la configuración del API.</Text>
+          ) : null}
         </VStack>
 
         <VStack space="xs">
@@ -304,9 +378,25 @@ export default function ReportsScreen() {
         </VStack>
 
         <VStack space="sm">
-          <Button borderRadius="$full" isDisabled={loading || uploading || !projectId || !type || !objectId || !name} onPress={submit}>
-            <Button.Text>{loading ? 'Enviando...' : 'Enviar'}</Button.Text>
-          </Button>
+          <HStack space="sm">
+            <Button 
+              flex={1} 
+              borderRadius="$full" 
+              isDisabled={loading || uploading || !projectId || !type || !objectId || !name} 
+              onPress={submit}
+            >
+              <Button.Text>{loading ? 'Enviando...' : 'Enviar'}</Button.Text>
+            </Button>
+            <Button 
+              flex={1} 
+              variant="outline" 
+              borderRadius="$full" 
+              isDisabled={loading || !projectId || !type || !objectId || !name} 
+              onPress={saveDraft}
+            >
+              <Button.Text>{loading ? 'Guardando...' : 'Borrador'}</Button.Text>
+            </Button>
+          </HStack>
           <Button variant="outline" borderRadius="$full" isDisabled={!projectId || !type || !objectId || !name} onPress={pickAndUpload}>
             <Button.Text>Agregar imágenes</Button.Text>
           </Button>

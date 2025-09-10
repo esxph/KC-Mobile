@@ -9,8 +9,10 @@ export type PendingReport = {
   objectId?: string;
   name: string;
   comment?: string;
-  progress?: number; // 0-100
+  quantity?: string; // quantity as text field
+  unitType?: string; // unit type ID
   media: PendingMedia[];
+  isDraft?: boolean; // true if this is a draft, false/undefined if it's a regular pending item
 };
 
 const KEY = 'kc-pending-reports';
@@ -47,7 +49,7 @@ export async function updatePendingMedia(id: string, media: PendingMedia[]) {
   await savePending(list);
 }
 
-export async function updatePendingDetails(id: string, details: Partial<Pick<PendingReport, 'name' | 'comment' | 'progress'>>) {
+export async function updatePendingDetails(id: string, details: Partial<Pick<PendingReport, 'name' | 'comment' | 'quantity' | 'unitType'>>) {
   const list = await loadPending();
   const idx = list.findIndex(r => r.id === id);
   if (idx === -1) return;

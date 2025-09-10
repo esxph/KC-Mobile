@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Project, ElementsResponse } from './api';
+import type { Project, ElementsResponse, UnitType } from './api';
 
 const PROJECTS_KEY = 'kc-cache-projects';
 const ELEMENTS_KEY = (projectId: string) => `kc-cache-elements:${projectId}`;
+const UNIT_TYPES_KEY = 'kc-cache-unit-types';
 
 type CacheEnvelope<T> = { updatedAt: number; data: T };
 
@@ -32,6 +33,22 @@ export async function getCachedElements(projectId: string): Promise<ElementsResp
   if (!raw) return null;
   try {
     const env = JSON.parse(raw) as CacheEnvelope<ElementsResponse>;
+    return env.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCachedUnitTypes(unitTypes: UnitType[]) {
+  const env: CacheEnvelope<UnitType[]> = { updatedAt: Date.now(), data: unitTypes };
+  await AsyncStorage.setItem(UNIT_TYPES_KEY, JSON.stringify(env));
+}
+
+export async function getCachedUnitTypes(): Promise<UnitType[] | null> {
+  const raw = await AsyncStorage.getItem(UNIT_TYPES_KEY);
+  if (!raw) return null;
+  try {
+    const env = JSON.parse(raw) as CacheEnvelope<UnitType[]>;
     return env.data;
   } catch {
     return null;
